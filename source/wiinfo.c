@@ -2,7 +2,6 @@
 #include <wiiuse/wpad.h>
 #include <inttypes.h>
 #include <fat.h>
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -10,9 +9,6 @@
 #include <sys/stat.h>
 #include <unistd.h>
 #include <malloc.h>
-#include <sys/statvfs.h>
-#include <sdcard/card_cmn.h>
-#include <sdcard/card_io.h>
 #include <sdcard/wiisd_io.h>
 
 static void *xfb = NULL;
