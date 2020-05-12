@@ -1,4 +1,4 @@
-<img src="https://i.gyazo.com/37904f88f0d9fd51662c7b1bb619aff1.png">
+<img src="https://i.gyazo.com/f402e5335aeeb32d46b1a683ac4a0b29.png">
 
 # wiinfo
 <pre>
