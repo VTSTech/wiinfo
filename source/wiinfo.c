@@ -1,13 +1,24 @@
-#include <stdio.h>
-#include <stdlib.h>
 #include <gccore.h>
 #include <wiiuse/wpad.h>
 #include <inttypes.h>
+#include <fat.h>
+
+#include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <unistd.h>
 #include <malloc.h>
+#include <sys/statvfs.h>
+#include <sdcard/card_cmn.h>
+#include <sdcard/card_io.h>
+#include <sdcard/wiisd_io.h>
 
 static void *xfb = NULL;
 static GXRModeObj *rmode = NULL;
+
+const DISC_INTERFACE* sd = &__io_wiisd;
 
 int wii_init(void){
 	// Initialise the video system
@@ -236,56 +247,90 @@ void substring(char s[], char sub[], int p, int l) {
    }
    sub[c] = '\0';
 }
+
 char *gcvt(double value, int ndigit, char *buf);
+
 //---------------------------------------------------------------------------------
-int main(int argc, char **argv) {
+int main(int argc, char **argv, char** env) {
 //---------------------------------------------------------------------------------
 	wii_init();
+	FILE * fh;
+	u8 nick[22];
+	char sys_menu[3];
+	char fn[256];
+	char cwd[256];
+	char outstr[1024];
+	char tmpstr[1024];
 	int curr_ios = IOS_GetVersion();
 	int curr_ios_ver = IOS_GetRevisionMajor();
 	int curr_ios_rev = IOS_GetRevision();
-	//int pref_ios = IOS_GetPreferredVersion();
 	u32 hw_rev = SYS_GetHollywoodRevision();
 	u32 serial_no,boot2_ver,num_titles;
 	u32 region = CONF_GetRegion();
-	u8 nick[22];
 	CONF_GetNickName(nick);
 	ES_GetDeviceID(&serial_no);
 	ES_GetBoot2Version(&boot2_ver);
 	ES_GetNumTitles(&num_titles);
-	char sys_menu[3];
+	
 	if(rmode->viTVMode&VI_NON_INTERLACE) VIDEO_WaitVSync();
 	printf("\x1b[2;0H");
-	printf("\n _       ___ _ _   ____________ ");
-	printf("\n| |     / (_|_) | / / ____/ __ \\");
-	printf("\n| | /| / / / /  |/ / /_  / / / /");
-	printf("\n| |/ |/ / / / /|  / __/ / /_/ / ");
-	printf("\n|__/|__/_/_/_/ |_/_/    \\____/  \n");
-                                
-	printf("wiinfo......... v0.1\n");
-	printf("Author......... VTSTech (www.VTS-Tech.org)\n");
-	printf("Compiled....... 2020-05-10 1:22PM");
+	strcpy(outstr,"\n _       ___ _ _   ____________ ");
+	strcat(outstr,"\n| |     / (_|_) | / / ____/ __ \\");
+	strcat(outstr,"\n| | /| / / / /  |/ / /_  / / / /");
+	strcat(outstr,"\n| |/ |/ / / / /|  / __/ / /_/ / ");
+	strcat(outstr,"\n|__/|__/_/_/_/ |_/_/    \\____/  \n");                             
+	strcat(outstr,"wiinfo......... v0.11\n");
+	strcat(outstr,"Author......... VTSTech (www.VTS-Tech.org)\n");
+	strcat(outstr,"Compiled....... 2020-05-12 12:50PM");
 	gcvt(GetSysMenuNintendoVersion(GetSysMenuVersion()),3,sys_menu);
-	printf("\n\nSystem Menu.... %s%c", sys_menu,GetSysMenuRegion(GetSysMenuVersion()));
+	sprintf(tmpstr,"\n\nSystem Menu.... %s%c", sys_menu,GetSysMenuRegion(GetSysMenuVersion()));
+	strcat(outstr,tmpstr);
 	if (region == 0) {
-		printf("\nConsole Region. NTSC-J");	
+		strcat(outstr,"\nConsole Region. NTSC-J");	
 	} else if (region == 1) {
-		printf("\nConsole Region. NTSC-U");	
+		strcat(outstr,"\nConsole Region. NTSC-U");	
 	} else if (region == 2) {
-		printf("\nConsole Region. PAL");	
+		strcat(outstr,"\nConsole Region. PAL");	
 	} else if (region == 4) {
-		printf("\nConsole Region. NTSC-K");	
+		strcat(outstr,"\nConsole Region. NTSC-K");	
 	} else if (region == 5) {
-		printf("\nConsole Region. NTSC-Cn");	
+		strcat(outstr,"\nConsole Region. NTSC-C");	
 	}
-	printf("\nConsole ID..... %u ",serial_no);
-	printf("\nConsole Name... %s",nick);
-	printf("\nHollywood Rev.. %X",hw_rev);
-	printf("\nCurrent IOS.... %d v%d r%d",curr_ios,curr_ios_ver,curr_ios_rev);
-	//printf("\nPreferred IOS.. %d",pref_ios);
-	if (num_titles != 0) { printf("\nTitles......... %d ",num_titles); }
-	printf("\nBoot2.......... v%u ",boot2_ver);
+	sprintf(tmpstr,"\nConsole ID..... %u ",serial_no);
+	strcat(outstr,tmpstr);
+	sprintf(tmpstr,"\nConsole Name... %s",nick);
+	strcat(outstr,tmpstr);
+	sprintf(tmpstr,"\nHollywood Rev.. %X",hw_rev);
+	strcat(outstr,tmpstr);
+	sprintf(tmpstr,"\nCurrent IOS.... %d v%d r%d",curr_ios,curr_ios_ver,curr_ios_rev);
+	strcat(outstr,tmpstr);
+	if (num_titles != 0) {
+		sprintf(tmpstr,"\nTitles......... %d ",num_titles);
+		strcat(outstr,tmpstr);
+		}
+	sprintf(tmpstr,"\nBoot2.......... v%u \n",boot2_ver);
+	strcat(outstr,tmpstr);
 	
+	//*Main output
+	printf("%s",outstr);
+	
+	if (!fatInitDefault()) {
+		printf("fatInitDefault failure: terminating\n");
+		goto error;
+	}
+		
+	if(fatMount("sd",sd,0,2,128)){
+		getcwd(cwd,sizeof(cwd));
+		strcpy(fn,cwd);
+		strcat(fn,"wii.nfo");
+		fh = fopen(fn,"w");
+		fprintf(fh,"%s\n",outstr);
+		fclose(fh);
+		printf("\n%d bytes written to %s\n",strlen(outstr),fn);
+	} else {
+		printf("Error! fatMount() failed.\n");
+	}
+	error:	
 	while(1) {
 		// Call WPAD_ScanPads each loop, this reads the latest controller states
 		WPAD_ScanPads();
